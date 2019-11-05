@@ -1,4 +1,5 @@
 <?php
+
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
@@ -29,30 +30,45 @@
 
 namespace OCA\Files_Sharing\AppInfo;
 
-use OCA\Files_Sharing\Middleware\OCSShareAPIMiddleware;
-use OCA\Files_Sharing\Middleware\ShareInfoMiddleware;
-use OCA\Files_Sharing\MountProvider;
-use OCA\Files_Sharing\Notification\Notifier;
-use OCP\AppFramework\App;
 use OC\AppFramework\Utility\SimpleContainer;
+use OCA\Files_Sharing\Capabilities;
 use OCA\Files_Sharing\Controller\ExternalSharesController;
 use OCA\Files_Sharing\Controller\ShareController;
+use OCA\Files_Sharing\External\Manager;
+use OCA\Files_Sharing\Listener\LoadAdditionalListener;
+use OCA\Files_Sharing\Listener\LoadSidebarListener;
+use OCA\Files_Sharing\Middleware\OCSShareAPIMiddleware;
+use OCA\Files_Sharing\Middleware\ShareInfoMiddleware;
 use OCA\Files_Sharing\Middleware\SharingCheckMiddleware;
+use OCA\Files_Sharing\MountProvider;
+use OCA\Files_Sharing\Notification\Notifier;
+use OCA\Files\Event\LoadAdditionalScriptsEvent;
+use OCA\Files\Event\LoadSidebar;
+use OCP\AppFramework\App;
 use OCP\AppFramework\Utility\IControllerMethodReflector;
 use OCP\Defaults;
+use OCP\EventDispatcher\IEventDispatcher;
 use OCP\Federation\ICloudIdManager;
-use \OCP\IContainer;
+use OCP\Files\Config\IMountProviderCollection;
+use OCP\IContainer;
 use OCP\IServerContainer;
-use OCA\Files_Sharing\Capabilities;
-use OCA\Files_Sharing\External\Manager;
 
 class Application extends App {
-	public function __construct(array $urlParams = array()) {
-		parent::__construct('files_sharing', $urlParams);
+
+	const APP_ID = 'files_sharing';
+
+	public function __construct(array $urlParams = []) {
+		parent::__construct(self::APP_ID, $urlParams);
 
 		$container = $this->getContainer();
+
 		/** @var IServerContainer $server */
 		$server = $container->getServer();
+
+		/** @var IEventDispatcher $dispatcher */
+		$dispatcher = $container->query(IEventDispatcher::class);
+		$mountProviderCollection = $server->getMountProviderCollection();
+		$notifications = $server->getNotificationManager();
 
 		/**
 		 * Controllers
@@ -161,21 +177,98 @@ class Application extends App {
 			);
 		});
 
-		/*
+		/**
 		 * Register capabilities
 		 */
 		$container->registerCapability(Capabilities::class);
 
-		/** @var \OCP\Notification\IManager $notifications */
-		$notifications = $container->query(\OCP\Notification\IManager::class);
 		$notifications->registerNotifierService(Notifier::class);
+
+		$this->registerMountProviders($mountProviderCollection);
+		$this->registerEventsScripts($dispatcher);
+		$this->setupSharingMenus();
 	}
 
-	public function registerMountProviders() {
-		/** @var \OCP\IServerContainer $server */
-		$server = $this->getContainer()->query('ServerContainer');
-		$mountProviderCollection = $server->getMountProviderCollection();
+	protected function registerMountProviders(IMountProviderCollection $mountProviderCollection) {
 		$mountProviderCollection->registerProvider($this->getContainer()->query('MountProvider'));
 		$mountProviderCollection->registerProvider($this->getContainer()->query('ExternalMountProvider'));
+	}
+
+	protected function registerEventsScripts(IEventDispatcher $dispatcher) {
+		$dispatcher->addServiceListener(LoadAdditionalScriptsEvent::class, LoadAdditionalListener::class);
+		$dispatcher->addServiceListener(LoadSidebar::class, LoadSidebarListener::class);
+
+		$dispatcher->addListener('\OCP\Collaboration\Resources::loadAdditionalScripts', function() {
+			\OCP\Util::addScript('files_sharing', 'dist/collaboration');
+		});
+	}
+
+	protected function setupSharingMenus() {
+		$config = \OC::$server->getConfig();
+		$userSession = \OC::$server->getUserSession();
+		$l = \OC::$server->getL10N('files_sharing');
+
+		if ($config->getAppValue('core', 'shareapi_enabled', 'yes') !== 'yes') {
+			return;
+		}
+
+		$sharingSublistArray = [];
+	
+		if (\OCP\Util::isSharingDisabledForUser() === false) {
+			array_push($sharingSublistArray, [
+				'id' => 'sharingout',
+				'appname' => 'files_sharing',
+				'script' => 'list.php',
+				'order' => 16,
+				'name' => $l->t('Shared with others'),
+			]);
+		}
+	
+		array_push($sharingSublistArray, [
+			'id' => 'sharingin',
+			'appname' => 'files_sharing',
+			'script' => 'list.php',
+			'order' => 15,
+			'name' => $l->t('Shared with you'),
+		]);
+	
+		if (\OCP\Util::isSharingDisabledForUser() === false) {
+			// Check if sharing by link is enabled
+			if ($config->getAppValue('core', 'shareapi_allow_links', 'yes') === 'yes') {
+				array_push($sharingSublistArray, [
+					'id' => 'sharinglinks',
+					'appname' => 'files_sharing',
+					'script' => 'list.php',
+					'order' => 17,
+					'name' => $l->t('Shared by link'),
+				]);
+			}
+		}
+	
+		array_push($sharingSublistArray, [
+			'id' => 'deletedshares',
+			'appname' => 'files_sharing',
+			'script' => 'list.php',
+			'order' => 19,
+			'name' => $l->t('Deleted shares'),
+		]);
+	
+		// show_Quick_Access stored as string
+		$user = $userSession->getUser();
+		$defaultExpandedState = true;
+		if ($user instanceof \OCP\IUser) {
+			$defaultExpandedState = $config->getUserValue($userSession->getUser()->getUID(), 'files', 'show_sharing_menu', '0') === '1';
+		}
+	
+		\OCA\Files\App::getNavigationManager()->add([
+			'id' => 'shareoverview',
+			'appname' => 'files_sharing',
+			'script' => 'list.php',
+			'order' => 18,
+			'name' => $l->t('Shares'),
+			'classes' => 'collapsible',
+			'sublist' => $sharingSublistArray,
+			'expandedState' => 'show_sharing_menu'
+		]);
 	}
 }
