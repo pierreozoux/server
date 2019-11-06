@@ -164,7 +164,7 @@ class Manager implements IManager {
 		$query->select('*')->from(self::TABLE_TOKENS)
 			->where($query->expr()->eq('token', $query->createNamedParameter($token, IQueryBuilder::PARAM_STR)));
 		$result = $query->execute();
-		if ($result) {
+		if ($result->rowCount() === 1) {
 			return new Token($this, $result->fetch(FetchMode::ASSOCIATIVE));
 		}
 		throw new \RuntimeException('Failed to validate the token');

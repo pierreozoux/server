@@ -93,29 +93,29 @@ $application->registerRoutes(
 			],
 			[
 				'name' => 'DirectEditingView#edit',
-				'url' => '/direct/{token}',
+				'url' => '/directEditing/{token}',
 				'verb' => 'GET'
 			],
 		],
 		'ocs' => [
 			[
 				'name' => 'DirectEditing#get',
-				'url' => '/api/v1/direct',
+				'url' => '/api/v1/directEditing',
 				'verb' => 'GET'
 			],
 			[
 				'name' => 'DirectEditing#templates',
-				'url' => '/api/v1/direct/templates/{editorId}/{creatorId}',
+				'url' => '/api/v1/directEditing/templates/{editorId}/{creatorId}',
 				'verb' => 'GET'
 			],
 			[
 				'name' => 'DirectEditing#open',
-				'url' => '/api/v1/direct/open',
+				'url' => '/api/v1/directEditing/open',
 				'verb' => 'POST'
 			],
 			[
 				'name' => 'DirectEditing#create',
-				'url' => '/api/v1/direct/create',
+				'url' => '/api/v1/directEditing/create',
 				'verb' => 'POST'
 			],
 		]

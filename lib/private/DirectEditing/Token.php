@@ -69,4 +69,8 @@ class Token implements IToken {
 		return $this->data['editor_id'];
 	}
 
+	public function getUser(): string {
+		return $this->data['user_id'];
+	}
+
 }
