@@ -364,7 +364,7 @@ class Cache implements ICache {
 				$query->insert('filecache_extended');
 
 				$query->setValue('fileid', $query->createNamedParameter($id, IQueryBuilder::PARAM_INT));
-				foreach ($extensionValues as $column => $value) {
+				foreach (array_filter($extensionValues) as $column => $value) {
 					$query->setValue($column, $query->createNamedParameter($value));
 				}
 
